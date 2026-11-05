@@ -92,10 +92,16 @@ def find_ws_path(work_dir: str, sheet_name: str | None) -> str:
     for rel in rels_tree.getroot():
         if rel.get("Id") == rid:
             target = rel.get("Target")
-            # Handle absolute paths (starting with /) and relative paths
+            # Absolute Targets are package-root relative:
+            # /xl/worksheets/sheet1.xml
             if target.startswith("/"):
-                target = target[1:]  # Remove leading /
-            return os.path.join(work_dir, target)
+                return os.path.join(work_dir, target[1:])
+            # Relative Targets resolve against the directory of the source
+            # part (xl/workbook.xml), so worksheets/sheet1.xml lives at
+            # xl/worksheets/sheet1.xml — not at the unpacked root. The
+            # minimal_xlsx template and the documented
+            # "cp -r templates/minimal_xlsx" flow both use this form.
+            return os.path.normpath(os.path.join(work_dir, "xl", target))
 
     print(f"ERROR: Relationship not found: {rid}")
     sys.exit(1)
