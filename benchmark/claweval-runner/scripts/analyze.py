@@ -131,16 +131,39 @@ def load_task_info(task_id: str, tasks_dir: str) -> dict:
         return {"task_id": task_id, "error": "task.yaml not found"}
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
+
+    # A bare YAML key ("prompt:") parses as null and a plain scalar
+    # ("prompt: do the thing") parses as a string; both are valid YAML
+    # for a field the report treats as a mapping, and neither may crash
+    # the whole run. Coerce every field to the type its consumers expect.
+    prompt = data.get("prompt")
+    if isinstance(prompt, dict):
+        prompt_text = prompt.get("text") or ""
+    elif isinstance(prompt, str):
+        prompt_text = prompt
+    else:
+        prompt_text = ""
+    reference = data.get("reference_solution")
+    reference_text = reference[:300] if isinstance(reference, str) else ""
+
+    def text_field(field: str) -> str:
+        value = data.get(field)
+        return value if isinstance(value, str) else ""
+
+    def list_field(field: str) -> list:
+        value = data.get(field)
+        return value if isinstance(value, list) else []
+
     return {
-        "task_id": data.get("task_id", task_id),
-        "task_name": data.get("task_name", ""),
-        "category": data.get("category", ""),
-        "difficulty": data.get("difficulty", ""),
-        "prompt": data.get("prompt", {}).get("text", "")[:300],
-        "scoring_components": data.get("scoring_components", []),
-        "judge_rubric": data.get("judge_rubric", ""),
-        "reference_solution": data.get("reference_solution", "")[:300],
-        "primary_dimensions": data.get("primary_dimensions", []),
+        "task_id": text_field("task_id") or task_id,
+        "task_name": text_field("task_name"),
+        "category": text_field("category"),
+        "difficulty": text_field("difficulty"),
+        "prompt": prompt_text[:300],
+        "scoring_components": list_field("scoring_components"),
+        "judge_rubric": text_field("judge_rubric"),
+        "reference_solution": reference_text,
+        "primary_dimensions": list_field("primary_dimensions"),
     }
 
 
