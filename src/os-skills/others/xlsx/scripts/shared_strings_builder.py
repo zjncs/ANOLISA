@@ -30,10 +30,36 @@ Notes:
 import sys
 import html
 import argparse
+import re
 
 
 HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
 SST_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+
+# Characters XML 1.0 forbids: C0 controls except tab/newline/CR, the
+# surrogate code points, and the two non-characters U+FFFE/U+FFFF.
+# html.escape() does not touch them, so without this check a string
+# carrying one silently produces a sharedStrings.xml that is not
+# well-formed — xlsx_pack only reports a cryptic parse error later, and
+# Excel rejects the workbook outright.
+_ILLEGAL_XML_CHARS = re.compile(
+    "[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]"
+)
+
+
+def validate_strings(strings: list[str]) -> None:
+    """Exit with a clean error if a string cannot appear in XML 1.0."""
+    for i, s in enumerate(strings):
+        m = _ILLEGAL_XML_CHARS.search(s)
+        if m:
+            print(
+                f"ERROR: String at index {i} ({s[:30]!r}...) contains "
+                f"U+{ord(m.group()):04X}, which is not a legal XML 1.0 "
+                "character. Remove or replace it — Excel would reject the "
+                "workbook.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
 
 def escape_text(s: str) -> tuple[str, bool]:
@@ -144,6 +170,7 @@ def main() -> None:
         sys.exit(1)
 
     strings = deduplicate(raw)
+    validate_strings(strings)
 
     if len(strings) < len(raw):
         removed = len(raw) - len(strings)
