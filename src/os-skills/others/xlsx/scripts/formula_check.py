@@ -112,7 +112,14 @@ def extract_sheet_refs(formula: str) -> list[str]:
     refs = []
     # Quoted sheet names: 'Sheet Name'! — an apostrophe inside the name is
     # escaped by doubling it, so the sheet It's is referenced as 'It''s'!A1.
-    for m in re.finditer(r"'((?:[^']|'')*)'!", formula):
+    # The quantifier is bounded to Excel's 31-character sheet-name limit:
+    # each iteration eats one plain char or one '' escape pair, so {0,31}
+    # admits every legal name while an unclosed apostrophe run cannot
+    # degrade the ambiguous ('' as escape or as close+reopen) alternation
+    # into quadratic backtracking — the same hazard the name-candidate
+    # scan guards against, and check() calls this function on every
+    # formula first.
+    for m in re.finditer(r"'((?:[^']|''){0,31})'!", formula):
         refs.append(m.group(1).replace("''", "'"))
     # Unquoted sheet names: SheetName! (not preceded by a single quote)
     for m in re.finditer(r"(?<!')([A-Za-z_\u4e00-\u9fff][A-Za-z0-9_.·\u4e00-\u9fff]*)!", formula):

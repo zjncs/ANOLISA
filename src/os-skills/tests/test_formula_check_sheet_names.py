@@ -12,6 +12,7 @@ producing a false broken_sheet_ref against a sheet that does exist.
 import os
 from pathlib import Path
 import sys
+import time
 import unittest
 
 sys.dont_write_bytecode = True
@@ -48,6 +49,29 @@ class TestExtractSheetRefs(unittest.TestCase):
 
     def test_unquoted_name_unchanged(self):
         self.assertEqual(fc.extract_sheet_refs("=Sheet1!A1"), ["Sheet1"])
+
+    def test_31_char_name_with_escapes_still_extracted(self):
+        """The {0,31} bound counts escapes as single iterations, so a
+        maximal legal sheet name with apostrophes still extracts."""
+        name = "It'" + "s" * 28  # 31 chars, one escaped apostrophe
+        quoted = "'" + name.replace("'", "''") + "'"
+        self.assertEqual(fc.extract_sheet_refs(f"={quoted}!A1"), [name])
+
+    def test_unclosed_apostrophe_run_stays_fast(self):
+        """An unclosed apostrophe run must not trigger quadratic
+        backtracking.
+
+        The unbounded escape-aware quantifier took ~0.9s on an
+        8192-character payload (Excel's formula length cap) and ~3.5s at
+        16384, doubling with every 2x length; check() calls this
+        function on every formula before the name scan, so the
+        workbook-level hang survives the name scan's own bound without
+        this one.
+        """
+        payload = "=SUM('" + "'" * 8192 + "x"
+        start = time.perf_counter()
+        fc.extract_sheet_refs(payload)
+        self.assertLess(time.perf_counter() - start, 0.5)
 
 
 if __name__ == "__main__":
