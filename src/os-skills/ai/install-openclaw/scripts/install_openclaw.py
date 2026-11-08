@@ -178,14 +178,26 @@ def ordered_unique(items):
 
 
 def merge_plugin_allow(existing, merged):
-    existing_allow = existing.get("plugins", {}).get("allow", [])
-    merged_allow = merged.get("plugins", {}).get("allow")
-    if merged_allow is None:
+    # Both configs come from user-editable JSON: "plugins": null is a legal
+    # hand-edit, and a non-list "allow" (e.g. the string "all") used to
+    # crash the installer with a bare AttributeError or silently spread the
+    # string into per-character entries. Shape-check both sides; a wrong
+    # shape means nothing to concatenate, not a crash.
+    existing_plugins = existing.get("plugins")
+    existing_allow = (
+        existing_plugins.get("allow") if isinstance(existing_plugins, dict) else None
+    )
+    if not isinstance(existing_allow, list):
+        existing_allow = []
+
+    merged_plugins = merged.get("plugins")
+    if not isinstance(merged_plugins, dict):
+        return merged
+    merged_allow = merged_plugins.get("allow")
+    if not isinstance(merged_allow, list):
         return merged
 
-    merged.setdefault("plugins", {})["allow"] = ordered_unique(
-        [*existing_allow, *merged_allow]
-    )
+    merged_plugins["allow"] = ordered_unique([*existing_allow, *merged_allow])
     return merged
 
 
